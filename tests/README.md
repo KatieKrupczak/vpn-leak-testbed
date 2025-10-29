@@ -1,0 +1,1 @@
+How to run tests / simple validations containers are working as intended
