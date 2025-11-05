@@ -1,0 +1,32 @@
+# Docker
+*.log
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ipynb_checkpoints/
+
+# Results & large artifacts
+results/
+**/*.pcap
+**/*.pcapng
+**/*.har
+**/*.sqlite
+**/*.csv
+**/*.html
+
+# Secrets & provider configs
+compose/.env
+vpn/secrets/
+vpn/configs/*.conf
+vpn/configs/*.ovpn
+vpn/configs/*.key
+vpn/configs/*.pem
+vpn/configs/*.toml
+
+# Playwright cache
+agent/ms-playwright/
+agent/playwright/.cache/
