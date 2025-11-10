@@ -10,9 +10,11 @@ services:
       - NET_RAW
     volumes:
       - ../vpn/configs:/etc/vpn/configs:ro
+      - ../vpn/auth:/etc/vpn/auth:ro
     environment:
       # Set this from the outside: e.g., VPN_CONFIG=/etc/vpn/configs/nord.ovpn
       - VPN_CONFIG=${VPN_CONFIG:-/etc/vpn/configs/default.ovpn}
+      - VPN_AUTH_FILE=${VPN_AUTH_FILE:-}
 
   agent:
     build:

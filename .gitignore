@@ -20,7 +20,7 @@ results/
 
 # Secrets & provider configs
 compose/.env
-vpn/secrets/
+vpn/auth/
 vpn/configs/*.conf
 vpn/configs/*.ovpn
 vpn/configs/*.key

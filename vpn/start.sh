@@ -6,12 +6,20 @@ set -eu # Exit on error and undefined variable
 # If not set, use default.ovpn
 CONFIG="${VPN_CONFIG:-/etc/vpn/configs/default.ovpn}"
 
+# Optional auth file (username/password) inside the container
+AUTH="${VPN_AUTH_FILE:-}"
+
 echo "[vpn] Using config: $CONFIG"
 
 case "$CONFIG" in
   *.ovpn) 
     echo "[vpn] Starting OpenVPN..."
-    openvpn --config "$CONFIG" &
+    if [ -n "$AUTH" ]; then
+      echo "[vpn] Using auth file: $AUTH"
+      openvpn --config "$CONFIG" --auth-user-pass "$AUTH" &
+    else
+      openvpn --config "$CONFIG" &
+    fi
     VPN_PID=$!
     ;;
   *.conf) 
