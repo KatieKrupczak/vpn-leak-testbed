@@ -8,6 +8,8 @@ services:
     cap_add:
       - NET_ADMIN
       - NET_RAW
+    devices:
+      - /dev/net/tun:/dev/net/tun
     volumes:
       - ../vpn/configs:/etc/vpn/configs:ro
       - ../vpn/auth:/etc/vpn/auth:ro
@@ -26,4 +28,4 @@ services:
       - vpn
     volumes:
       - ../results:/results
-    command: ["sh", "-c", "echo 'My IP is:' && curl -s https://ifconfig.me && echo && sleep 300"]
+    command: ["sh", "-c", "echo 'VPN-Agent starting' && sleep 15 && echo 'My IP is:' && curl -s https://ifconfig.me && echo && sleep 300"]
