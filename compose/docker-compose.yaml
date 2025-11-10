@@ -1,0 +1,27 @@
+version: "3.8"
+
+services:
+  vpn:
+    build:
+      context: ../vpn
+    container_name: vpn-client
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    volumes:
+      - ../vpn/configs:/etc/vpn/configs:ro
+    environment:
+      # Set this from the outside: e.g., VPN_CONFIG=/etc/vpn/configs/nord.ovpn
+      - VPN_CONFIG=${VPN_CONFIG:-/etc/vpn/configs/default.ovpn}
+
+  agent:
+    build:
+      context: ../agent
+    container_name: vpn-agent
+    # This is the key line: share network with vpn service (later)
+    network_mode: "service:vpn"
+    depends_on:
+      - vpn
+    volumes:
+      - ../results:/results
+    command: ["sh", "-c", "echo 'My IP is:' && curl -s https://ifconfig.me && echo && sleep 300"]
