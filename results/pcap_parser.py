@@ -22,14 +22,14 @@ def parse_pcap(file_path, vpn_ips, vpn_dns_ips):
                     'dst_ip': ip_dst
                 })
         
-        #IPv6 leak -- if src IPv6 address is not a VPN IP, it’s leaking the real IPv6
+        # IPv6 leak -- if src IPv6 address is not a VPN IP, it’s leaking the real IPv6
         if hasattr(packet, 'ipv6'):
             if ip_src and ip_src not in vpn_ips:
                 ipv6_leaks.append({
                     'src_ip': ip_src
                 })
 
-        #WebRTC leak -- if STUN server IP is not in VPN IPs, it’s leaking real IP
+        # WebRTC leak -- if STUN server IP is not in VPN IPs, it’s leaking real IP
         if 'STUN' in packet:
             mapped_ip = getattr(packet.stun, 'mapped_address', None)
             if mapped_ip and mapped_ip not in vpn_ips:
@@ -37,6 +37,7 @@ def parse_pcap(file_path, vpn_ips, vpn_dns_ips):
                     'mapped_ip': mapped_ip
                 })
 
+        # QUIC/HTTP3 leaks 
         if hasattr(packet, 'udp'):
             if int(packet.udp.dstport) == 443:
                 if (ip_src and ip_src not in vpn_ips):
