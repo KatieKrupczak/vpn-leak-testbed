@@ -21,12 +21,12 @@ services:
       - VPN_AUTH_FILE=${VPN_AUTH_FILE:-}
     networks:
       - vpn-net
+    
 
   agent:
     build:
       context: ../agent
     container_name: vpn-agent
-    # This is the key line: share network with vpn service (later)
     network_mode: "service:vpn"
     depends_on:
       - vpn
@@ -34,6 +34,7 @@ services:
       - ../tests:/tests:ro
       - ../results:/results
       - ../agent/visit_urls.sh:/agent/visit_urls.sh:ro
+      - ../agent/webrtc_check.js:/agent/webrtc_check.js:ro
     environment:
       - OUTDIR=/results
     cap_add:
