@@ -5,6 +5,10 @@ services:
     build:
       context: ../vpn
     container_name: vpn-client
+    devices:
+      - /dev/net/tun
+    sysctls:
+      - net.ipv6.conf.all.disable_ipv6=0
     cap_add:
       - NET_ADMIN
       - NET_RAW
@@ -15,6 +19,8 @@ services:
       # Set this from the outside: e.g., VPN_CONFIG=/etc/vpn/configs/nord.ovpn
       - VPN_CONFIG=${VPN_CONFIG:-/etc/vpn/configs/default.ovpn}
       - VPN_AUTH_FILE=${VPN_AUTH_FILE:-}
+    networks:
+      - vpn-net
 
   agent:
     build:
@@ -25,5 +31,18 @@ services:
     depends_on:
       - vpn
     volumes:
+      - ../tests:/tests:ro
       - ../results:/results
-    command: ["sh", "-c", "echo 'My IP is:' && curl -s https://ifconfig.me && echo && sleep 300"]
+      - ../agent/visit_urls.sh:/agent/visit_urls.sh:ro
+    environment:
+      - OUTDIR=/results
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    command: ["/agent/visit_urls.sh"]
+
+      
+
+networks:
+  vpn-net:
+    driver: bridge

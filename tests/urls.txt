@@ -1,0 +1,26 @@
+
+# Standard sites
+https://www.google.com
+https://www.youtube.com
+https://www.facebook.com
+https://www.reddit.com
+
+# Sites with WebRTC
+https://meet.google.com
+https://discord.com
+
+# IPv6-enabled sites
+https://test-ipv6.com
+https://ip6only.me/ 
+
+# DNS leak test sites
+https://dnsleaktest.com
+https://browserleaks.com/ip
+
+# Sites using QUIC protocol
+https://www.cloudflare.com
+
+# Sites with different CDNs
+https://www.amazon.com
+https://www.netflix.com
+https://www.twitter.com
