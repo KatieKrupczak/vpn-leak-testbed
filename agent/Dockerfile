@@ -30,6 +30,7 @@ WORKDIR /agent
 # Copy scripts
 COPY visit_urls.sh /agent/visit_urls.sh
 COPY webrtc_check.js /agent/webrtc_check.js
+COPY quic_check.js /agent/quic_check.js
 
 RUN chmod +x /agent/visit_urls.sh
 
