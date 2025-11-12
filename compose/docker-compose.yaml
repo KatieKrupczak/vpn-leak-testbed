@@ -16,18 +16,17 @@ services:
       - ../vpn/configs:/etc/vpn/configs:ro
       - ../vpn/auth:/etc/vpn/auth:ro
     environment:
-      # Set this from the outside: e.g., VPN_CONFIG=/etc/vpn/configs/nord.ovpn
       - VPN_CONFIG=${VPN_CONFIG:-/etc/vpn/configs/default.ovpn}
       - VPN_AUTH_FILE=${VPN_AUTH_FILE:-}
     networks:
-      - vpn-net
-    
+      ipv6-net:
+        ipv6_address: "2001:db8:1::2"
 
   agent:
     build:
       context: ../agent
     container_name: vpn-agent
-    network_mode: "service:vpn"
+    network_mode: "service:vpn"  # shares vpn network
     depends_on:
       - vpn
     volumes:
@@ -35,15 +34,16 @@ services:
       - ../results:/results
       - ../agent/visit_urls.sh:/agent/visit_urls.sh:ro
       - ../agent/webrtc_check.js:/agent/webrtc_check.js:ro
-    environment:
-      - OUTDIR=/results
     cap_add:
       - NET_ADMIN
       - NET_RAW
     command: ["/agent/visit_urls.sh"]
 
-      
-
 networks:
-  vpn-net:
+  ipv6-net:
     driver: bridge
+    enable_ipv6: true
+    ipam:
+      driver: default
+      config:
+        - subnet: "2001:db8:1::/64"

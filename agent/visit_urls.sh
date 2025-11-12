@@ -2,6 +2,7 @@
 set -euo pipefail
 
 URL_FILE="${URL_FILE:-/tests/urls.txt}"
+WEBRTC_FILE="${WEBRTC_FILE:-/tests/webrtc_urls.txt}"
 OUTDIR="${OUTDIR:-/results}"
 mkdir -p "$OUTDIR"
 
@@ -17,65 +18,55 @@ trap 'kill $TCPDUMP_PID 2>/dev/null || true' EXIT
 
 # Wait for VPN tunnel (tun0) to appear
 echo "Waiting for VPN (tun0) to come up..."
-# change interface name if your VPN uses a different interface
 while ! ip addr show tun0 &>/dev/null; do
   sleep 1
 done
 echo "VPN tunnel is up."
 
+# Force DNS to public resolvers
 echo "nameserver 1.1.1.1" > /etc/resolv.conf
-echo "nameserver 8.8.8.8" >> /etc/resolv.conf
 
-# echo "=== VPN Diagnostics ==="
-# echo "Default route:"
-# ip route
-# echo
-# echo "Interfaces:"
-# ip addr show
-# echo
-# echo "DNS resolvers:"
-# cat /etc/resolv.conf
-# echo
-# echo "Test connectivity to public IP:"
-# ping -c 3 1.1.1.1 || echo "Ping failed"
-# echo
-# echo "Test HTTPS request:"
-# curl -v https://ifconfig.me || echo "Curl failed"
-# echo "=== End VPN Diagnostics ==="
-# echo
 
-# List of URLs (exact) for which to run the headless WebRTC probe.
-# Edit this list to include only the sites you want to test for leaks.
-WEBRTC_URLS=(
-  "https://meet.google.com"
-  "https://example.com"
-)
+# === IPv4 / IPv6 URL Tests ===
+if [ -f "$URL_FILE" ]; then
+  echo "Starting IPv4/IPv6 tests from $URL_FILE"
+  while IFS= read -r url || [ -n "$url" ]; do
+    url="$(echo "$url" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+    [ -z "$url" ] && continue
+    [[ $url == \#* ]] && continue
 
-# Read URLs and visit
-while IFS= read -r url || [ -n "$url" ]; do
-  # trim whitespace and skip empty/comment lines
-  url="$(echo "$url" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
-  [ -z "$url" ] && continue
-  [[ $url == \#* ]] && continue
+    echo "Visiting (IPv4): $url"
+    curl -4 -s -L --max-time 30 "$url" >/dev/null || echo "curl IPv4 failed for $url"
 
-  echo "Visiting: $url"
-  # Simple fetch to exercise site
-  curl -s -L --max-time 30 "$url" >/dev/null || echo "curl failed for $url"
+    # echo "Visiting (IPv6): $url"
+    # curl -6 -s -L --max-time 30 "$url" >/dev/null || echo "curl IPv6 failed for $url"
 
-  # If url matches any entry in WEBRTC_URLS, run headless webrtc probe
-  for w in "${WEBRTC_URLS[@]}"; do
-    if [ "$url" = "$w" ]; then
-      echo "  -> Running headless WebRTC probe for $url"
-      # run the wrtc script; it will produce network traffic to capture
-      if ! timeout 30s node /agent/webrtc_check.js >/dev/null 2>&1; then
-        echo "  -> WebRTC probe timed out or failed for $url"
-      fi
-      break
+    sleep 1
+  done < "$URL_FILE"
+else
+  echo "No URL file found at $URL_FILE"
+fi
+
+
+# === WebRTC Tests ===
+if [ -f "$WEBRTC_FILE" ]; then
+  echo "Starting WebRTC tests from $WEBRTC_FILE"
+  while IFS= read -r wurl || [ -n "$wurl" ]; do
+    wurl="$(echo "$wurl" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+    [ -z "$wurl" ] && continue
+    [[ $wurl == \#* ]] && continue
+
+    echo "Running WebRTC probe for $wurl"
+    if ! timeout 30s node /agent/webrtc_check.js "$wurl" >/dev/null 2>&1; then
+      echo "  -> WebRTC probe timed out or failed for $wurl"
     fi
-  done
+    sleep 1
+  done < "$WEBRTC_FILE"
+  sleep 30
+else
+  echo "No WebRTC URL file found at $WEBRTC_FILE"
+fi
 
-  sleep 1
-done < "$URL_FILE"
 
 # Stop tcpdump and wait for it to finish writing
 echo "Stopping tcpdump"
@@ -84,4 +75,5 @@ wait "$TCPDUMP_PID" 2>/dev/null || true
 
 echo "Done. Combined pcap: $PCAP"
 
+# Keep container running for inspection
 tail -f /dev/null
