@@ -5,6 +5,10 @@ services:
     build:
       context: ../vpn
     container_name: vpn-client
+    devices:
+      - /dev/net/tun
+    sysctls:
+      - net.ipv6.conf.all.disable_ipv6=0
     cap_add:
       - NET_ADMIN
       - NET_RAW
@@ -14,18 +18,34 @@ services:
       - ../vpn/configs:/etc/vpn/configs:ro
       - ../vpn/auth:/etc/vpn/auth:ro
     environment:
-      # Set this from the outside: e.g., VPN_CONFIG=/etc/vpn/configs/nord.ovpn
       - VPN_CONFIG=${VPN_CONFIG:-/etc/vpn/configs/default.ovpn}
       - VPN_AUTH_FILE=${VPN_AUTH_FILE:-}
+    networks:
+      ipv6-net:
+        ipv6_address: "2001:db8:1::2"
 
   agent:
     build:
       context: ../agent
     container_name: vpn-agent
-    # This is the key line: share network with vpn service (later)
-    network_mode: "service:vpn"
+    network_mode: "service:vpn"  # shares vpn network
     depends_on:
       - vpn
     volumes:
+      - ../tests:/tests:ro
       - ../results:/results
-    command: ["sh", "-c", "echo 'VPN-Agent starting' && sleep 15 && echo 'My IP is:' && curl -s https://ifconfig.me && echo && sleep 300"]
+      - ../agent/visit_urls.sh:/agent/visit_urls.sh:ro
+      - ../agent/webrtc_check.js:/agent/webrtc_check.js:ro
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    command: ["/agent/visit_urls.sh"]
+
+networks:
+  ipv6-net:
+    driver: bridge
+    enable_ipv6: true
+    ipam:
+      driver: default
+      config:
+        - subnet: "2001:db8:1::/64"
