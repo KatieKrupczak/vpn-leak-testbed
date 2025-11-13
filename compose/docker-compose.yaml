@@ -6,9 +6,9 @@ services:
       context: ../vpn
     container_name: vpn-client
     devices:
-      - /dev/net/tun
+      - /dev/net/tun:/dev/net/tun
     sysctls:
-      - net.ipv6.conf.all.disable_ipv6=0
+      - net.ipv6.conf.all.disable_ipv6=0 # turns on IPv6 inside container; still need to set up VPN to route it
     cap_add:
       - NET_ADMIN
       - NET_RAW
@@ -18,9 +18,13 @@ services:
     environment:
       - VPN_CONFIG=${VPN_CONFIG:-/etc/vpn/configs/default.ovpn}
       - VPN_AUTH_FILE=${VPN_AUTH_FILE:-}
-    networks:
-      ipv6-net:
-        ipv6_address: "2001:db8:1::2"
+    dns:
+      - 8.8.8.8          # Google Public DNS IPv4
+      - 2001:4860:4860::8888  # Google Public DNS IPv6
+    #networks: commented out for now: concern that this will interfere with testing 
+    #  ipv6-net:
+    #    ipv6_address: "2001:db8:1::2" # assigns static IPv6 address on a Docker bridge network
+    # 
 
   agent:
     build:
@@ -39,11 +43,16 @@ services:
       - NET_RAW
     command: ["/agent/visit_urls.sh"]
 
-networks:
-  ipv6-net:
-    driver: bridge
-    enable_ipv6: true
-    ipam:
-      driver: default
-      config:
-        - subnet: "2001:db8:1::/64"
+# Creates a Docker-local IPv6 LAN with documentation prefix addresses.
+# This network is only between containers on that bridge.
+# Once OpenVPN brings up tun0 and you change the default route to tun0, traffic to the internet goes over the tunnel, not that bridge.
+# Concern: using a public-looking prefix that’s actually non-routable can be confusing in packet analysis.
+# analysis scripts might see IPv6 traffic on the bridge and misclassify it as “leak” or “public” when it’s just internal.
+#networks:
+#  ipv6-net:
+#    driver: bridge
+#    enable_ipv6: true
+#    ipam:
+#      driver: default
+#      config:
+#        - subnet: "2001:db8:1::/64" # is a non-routable documentation prefix. It will never give you public IPv6 connectivity.
