@@ -1,10 +1,10 @@
-COMPOSE = docker compose -f compose/docker-compose.yaml
+PROFILE ?= proton-free-tcp
 
-# Default provider if none set
-VPN_CONFIG ?= /etc/vpn/configs/default.ovpn
+COMPOSE_FILE = compose/docker-compose.yaml
+ENV_FILE = vpn/profiles/$(PROFILE).env
 
 up:
-	VPN_CONFIG=$(VPN_CONFIG) $(COMPOSE) up --build
+	docker compose -f $(COMPOSE_FILE) --env-file $(ENV_FILE) up --build
 
 down:
-	$(COMPOSE) down
+	docker compose -f $(COMPOSE_FILE) --env-file $(ENV_FILE) down -v

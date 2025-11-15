@@ -5,6 +5,7 @@ URL_FILE="${URL_FILE:-/tests/urls.txt}"
 WEBRTC_FILE="${WEBRTC_FILE:-/tests/webrtc_urls.txt}"
 QUIC_FILE="${QUIC_FILE:-/tests/quic_urls.txt}"
 OUTDIR="${OUTDIR:-/results}"
+IFACE="${VPN_IFACE:-tun0}"
 mkdir -p "$OUTDIR"
 
 TIMESTAMP=$(date +%Y%m%d-%H%M%S)
@@ -17,9 +18,9 @@ TCPDUMP_PID=$!
 
 trap 'kill $TCPDUMP_PID 2>/dev/null || true' EXIT
 
-# Wait for VPN tunnel (tun0) to appear
-echo "Waiting for VPN (tun0) to come up..."
-while ! ip addr show tun0 &>/dev/null; do
+# Wait for VPN tunnel  to appear
+echo "Waiting for VPN $IFACE to come up..."
+while ! ip addr show $IFACE &>/dev/null; do
   sleep 1
 done
 echo "VPN tunnel is up."

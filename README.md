@@ -36,7 +36,7 @@ If not follow these steps:
 
 # To start containers
 ```
-VPN_CONFIG=/etc/vpn/configs/proton-free-tcp.ovpn \
-VPN_AUTH_FILE=/etc/vpn/auth/proton-auth.txt \
-make up
+make up PROFILE=<vpn profile name>
+
+# e.g. make up PROFILE=proton-free-tcp
 ```
