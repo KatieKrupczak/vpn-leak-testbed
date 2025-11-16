@@ -5,6 +5,7 @@ services:
     build:
       context: ../vpn
     container_name: vpn-client
+    privileged: true
     devices:
       - /dev/net/tun
     sysctls:
