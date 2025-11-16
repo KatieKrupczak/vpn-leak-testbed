@@ -14,13 +14,6 @@ echo "[vpn] Using config: $CONFIG"
 case "$CONFIG" in
   *.ovpn) 
     echo "[vpn] Starting OpenVPN..."
-    
-    # Make sure the config file actually exists
-    if [ ! -f "$CONFIG" ]; then
-      echo "[vpn] ERROR: OpenVPN config file not found at $CONFIG"
-      exit 1
-    fi
-
     if [ -n "$AUTH" ]; then
       echo "[vpn] Using auth file: $AUTH"
       openvpn --config "$CONFIG" --auth-user-pass "$AUTH" &
@@ -31,29 +24,7 @@ case "$CONFIG" in
     ;;
   *.conf) 
     echo "[vpn] Starting WireGuard..."
-
-    # Make sure the config file actually exists
-    if [ ! -f "$CONFIG" ]; then
-      echo "[vpn] ERROR: WireGuard config file not found at $CONFIG"
-      exit 1
-    fi
-
-    IFACE="${VPN_IFACE:-wg0}" # set by profile env or default to wg0
-
-    # wg-quick expects interface name (wg0) and reads /etc/wireguard/wg0.conf
-    mkdir -p /etc/wireguard
-
-    CFG_PATH="/etc/wireguard/$IFACE.conf"
-
-    # Copy config into /etc/wireguard so wg-quick can find it
-    echo "[vpn] Copying $CONFIG -> $CFG_PATH"
-    cp "$CONFIG" "$CFG_PATH"
-
-    echo "[vpn] /etc/wireguard contents now:"
-    ls -l /etc/wireguard || true
-
-    echo "[vpn] Bringing up WireGuard interface: $IFACE"
-    wg-quick up "$IFACE"
+    wg-quick up "$CONFIG"
     VPN_PID=""
     ;;
   *) 
