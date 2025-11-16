@@ -8,8 +8,9 @@ import sys
 def get_vpn_ip(container_name="vpn-client"):
     """Get the VPN IP (tun0) from the container."""
     try:
+        iface = os.getenv("VPN_IFACE", "tun0")  # Default to tun0 if not set
         output = subprocess.check_output(
-            f"docker exec {container_name} ip addr show tun0", shell=True
+            f"docker exec {container_name} ip addr show {iface}", shell=True
         ).decode()
         match = re.search(r"inet (\d+\.\d+\.\d+\.\d+)", output)
         return [match.group(1)] if match else []
