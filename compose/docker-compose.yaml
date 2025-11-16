@@ -18,6 +18,7 @@ services:
     environment:
       - VPN_CONFIG=${VPN_CONFIG:-/etc/vpn/configs/default.ovpn}
       - VPN_AUTH_FILE=${VPN_AUTH_FILE:-}
+      - VPN_IFACE=${VPN_IFACE:-}
     networks:
       ipv6-net:
         ipv6_address: "2001:db8:1::2"
@@ -37,6 +38,8 @@ services:
     cap_add:
       - NET_ADMIN
       - NET_RAW
+    environment:
+      - VPN_IFACE=${VPN_IFACE:-}
     command: ["/agent/visit_urls.sh"]
 
 networks:

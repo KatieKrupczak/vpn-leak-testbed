@@ -40,3 +40,8 @@ make up PROFILE=<vpn profile name>
 
 # e.g. make up PROFILE=proton-free-tcp
 ```
+
+VPN_CONFIG=/etc/vpn/configs/protonplus.conf \
+VPN_AUTH_FILE= \
+VPN_IFACE=protonplus \
+make up
