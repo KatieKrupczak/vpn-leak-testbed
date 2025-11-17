@@ -26,49 +26,47 @@ done
 echo "VPN tunnel is up."
 
 # Force DNS to public resolvers
-echo "nameserver 1.1.1.1" > /etc/resolv.conf
+# echo "nameserver 1.1.1.1" > /etc/resolv.conf
+
+# === IPv4 / IPv6 URL Tests ===
+if [ -f "$URL_FILE" ]; then
+  echo "Starting IPv4/IPv6 tests from $URL_FILE"
+  while IFS= read -r url || [ -n "$url" ]; do
+    url="$(echo "$url" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+    [ -z "$url" ] && continue
+    [[ $url == \#* ]] && continue
+
+    echo "Visiting (IPv4): $url"
+    curl -4 -s -L --max-time 30 "$url" >/dev/null || echo "curl IPv4 failed for $url"
+
+    echo "Visiting (IPv6): $url"
+    curl -6 -s -L --max-time 30 "$url" >/dev/null || echo "curl IPv6 failed for $url"
+
+    sleep 1
+  done < "$URL_FILE"
+else
+  echo "No URL file found at $URL_FILE"
+fi
 
 
-# # === IPv4 / IPv6 URL Tests ===
-# if [ -f "$URL_FILE" ]; then
-#   echo "Starting IPv4/IPv6 tests from $URL_FILE"
-#   while IFS= read -r url || [ -n "$url" ]; do
-#     url="$(echo "$url" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
-#     [ -z "$url" ] && continue
-#     [[ $url == \#* ]] && continue
+# === WebRTC Tests ===
+if [ -f "$WEBRTC_FILE" ]; then
+  echo "Starting WebRTC tests from $WEBRTC_FILE"
+  while IFS= read -r wurl || [ -n "$wurl" ]; do
+    wurl="$(echo "$wurl" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+    [ -z "$wurl" ] && continue
+    [[ $wurl == \#* ]] && continue
 
-#     echo "Visiting (IPv4): $url"
-#     curl -4 -s -L --max-time 30 "$url" >/dev/null || echo "curl IPv4 failed for $url"
+    echo "Running WebRTC probe for $wurl"
+    if ! timeout 30s node /agent/webrtc_check.js "$wurl" >/dev/null 2>&1; then
+      echo "  -> WebRTC probe timed out or failed for $wurl"
+    fi
+    sleep 1
+  done < "$WEBRTC_FILE"
+else
+  echo "No WebRTC URL file found at $WEBRTC_FILE"
+fi
 
-#     # echo "Visiting (IPv6): $url"
-#     # curl -6 -s -L --max-time 30 "$url" >/dev/null || echo "curl IPv6 failed for $url"
-
-#     sleep 1
-#   done < "$URL_FILE"
-# else
-#   echo "No URL file found at $URL_FILE"
-# fi
-
-
-# # === WebRTC Tests ===
-# if [ -f "$WEBRTC_FILE" ]; then
-#   echo "Starting WebRTC tests from $WEBRTC_FILE"
-#   while IFS= read -r wurl || [ -n "$wurl" ]; do
-#     wurl="$(echo "$wurl" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
-#     [ -z "$wurl" ] && continue
-#     [[ $wurl == \#* ]] && continue
-
-#     echo "Running WebRTC probe for $wurl"
-#     if ! timeout 30s node /agent/webrtc_check.js "$wurl" >/dev/null 2>&1; then
-#       echo "  -> WebRTC probe timed out or failed for $wurl"
-#     fi
-#     sleep 1
-#   done < "$WEBRTC_FILE"
-# else
-#   echo "No WebRTC URL file found at $WEBRTC_FILE"
-# fi
-
-# === QUIC Tests ===
 # === QUIC Tests ===
 if [ -f "$QUIC_FILE" ]; then
   echo "Starting QUIC/HTTP3 tests from $QUIC_FILE"
@@ -87,7 +85,7 @@ else
   echo "No QUIC URL file found at $QUIC_FILE"
 fi
 
-sleep 30
+sleep 10
 # Stop tcpdump and wait for it to finish writing
 echo "Stopping tcpdump"
 kill -2 "$TCPDUMP_PID" 2>/dev/null || true

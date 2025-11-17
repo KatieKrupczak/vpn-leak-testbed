@@ -20,9 +20,6 @@ services:
       - VPN_CONFIG=${VPN_CONFIG:-/etc/vpn/configs/default.ovpn}
       - VPN_AUTH_FILE=${VPN_AUTH_FILE:-}
       - VPN_IFACE=${VPN_IFACE:-}
-    networks:
-      ipv6-net:
-        ipv6_address: "2001:db8:1::2"
 
   agent:
     build:
@@ -43,11 +40,3 @@ services:
       - VPN_IFACE=${VPN_IFACE:-}
     command: ["/agent/visit_urls.sh"]
 
-networks:
-  ipv6-net:
-    driver: bridge
-    enable_ipv6: true
-    ipam:
-      driver: default
-      config:
-        - subnet: "2001:db8:1::/64"

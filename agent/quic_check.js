@@ -28,7 +28,6 @@ const puppeteer = require('puppeteer-core');
       waitUntil: 'load',
       timeout: 30000 
     });
-    console.log(`Successfully loaded: ${url}`);
   } catch (error) {
     console.error(`Failed to load ${url}:`, error.message);
   }
