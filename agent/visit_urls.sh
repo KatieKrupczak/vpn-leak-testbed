@@ -1,15 +1,32 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+
 URL_FILE="${URL_FILE:-/tests/urls.txt}"
 WEBRTC_FILE="${WEBRTC_FILE:-/tests/webrtc_urls.txt}"
 QUIC_FILE="${QUIC_FILE:-/tests/quic_urls.txt}"
 OUTDIR="${OUTDIR:-/results}"
 IFACE="${VPN_IFACE:-tun0}"
+CFG="${VPN_CONFIG:-/etc/vpn/configs/default.ovpn}"
+
 mkdir -p "$OUTDIR"
 
+# Derive pcap filename fron config file name + timestamp
+BASENAME=$(basename "$CFG")
+EXT="${BASENAME##*.}"
+NAME="${BASENAME%.*}"
+
+if [ "$EXT" = "ovpn" ]; then
+  TYPE="opvn"
+elif [ "$EXT" = "conf" ]; then
+  TYPE="wg"
+else
+  TYPE="$EXT"
+fi
+
+
 TIMESTAMP=$(date +%Y%m%d-%H%M%S)
-PCAP="$OUTDIR/traffic-$TIMESTAMP.pcap"
+PCAP="$OUTDIR/traffic-${NAME}-${TYPE}-${TIMESTAMP}.pcap"
 
 # Start tcpdump once (capture all traffic)
 echo "Starting tcpdump -> $PCAP"

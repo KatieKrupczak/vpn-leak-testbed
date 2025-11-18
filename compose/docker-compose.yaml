@@ -38,5 +38,6 @@ services:
       - NET_RAW
     environment:
       - VPN_IFACE=${VPN_IFACE:-}
+      - VPN_CONFIG=${VPN_CONFIG:-/etc/vpn/configs/default.ovpn}
     command: ["/agent/visit_urls.sh"]
 

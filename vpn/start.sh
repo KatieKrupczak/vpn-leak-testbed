@@ -35,7 +35,7 @@ case "$CONFIG" in
     # wg-quick expects interface name (wg0) and reads /etc/wireguard/wg0.conf
     mkdir -p /etc/wireguard
 
-    CFG_PATH="/etc/wireguard/$IFACE.conf"
+    CFG_PATH="/etc/wireguard/wg0.conf"
 
     # Copy config into /etc/wireguard so wg-quick can find it
     echo "[vpn] Copying $CONFIG -> $CFG_PATH"
@@ -44,7 +44,6 @@ case "$CONFIG" in
     echo "[vpn] /etc/wireguard contents now:"
     ls -l /etc/wireguard || true
 
-    echo "[vpn] Bringing up WireGuard interface: $IFACE"
     wg-quick up "$IFACE"
     VPN_PID=""
     ;;
