@@ -1,40 +1,58 @@
-const puppeteer = require('puppeteer-core');
+const puppeteer = require('puppeteer');
+const fs = require('fs');
 
 (async () => {
-  // Get the STUN/TURN URL from command line argument
   const stunUrl = process.argv[2];
-  
-  if (!stunUrl) {
-    console.error('Error: No STUN/TURN URL provided');
+  const outputJson = process.argv[3]; // JSON file to append candidates to
+  if (!stunUrl || !outputJson) {
+    console.error('Usage: node webrtc_check.js <STUN_URL> <OUTPUT_JSON>');
     process.exit(1);
   }
 
-  console.log(`Testing WebRTC with: ${stunUrl}`);
+  console.log(`Testing WebRTC with STUN server: ${stunUrl}`);
 
   const browser = await puppeteer.launch({
     executablePath: '/usr/bin/chromium',
     headless: true,
-    //args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-ipv6']
     args: ['--no-sandbox', '--disable-setuid-sandbox']
   });
 
   const page = await browser.newPage();
   await page.goto('about:blank');
-  
-  // Pass the URL into the page context
-  await page.evaluate(async (url) => {
-    const pc = new RTCPeerConnection({ 
-      iceServers: [{ urls: url }] 
+
+  const candidates = await page.evaluate(async (url) => {
+    return new Promise((resolve) => {
+      const pc = new RTCPeerConnection({ iceServers: [{ urls: url }] });
+      const collected = [];
+
+      pc.onicecandidate = (event) => {
+        if (event.candidate) {
+          collected.push(event.candidate.candidate);
+          console.log('ICE candidate:', event.candidate.candidate);
+        }
+      };
+
+      const dc = pc.createDataChannel('probe');
+      dc.onopen = () => dc.send('probe');
+
+      pc.createOffer()
+        .then(offer => pc.setLocalDescription(offer))
+        .catch(console.error);
+
+      setTimeout(() => {
+        pc.close();
+        resolve(collected);
+      }, 8000); // wait 8s for ICE candidates
     });
-    const dc = pc.createDataChannel('probe');
-    dc.onopen = () => dc.send('probe');
-    await pc.setLocalDescription(await pc.createOffer());
-    
-    // Wait for ICE gathering
-    await new Promise(resolve => setTimeout(resolve, 5000));
-    
-    pc.close();
   }, stunUrl);
+
+  // Append to JSON file
+  let existing = [];
+  if (fs.existsSync(outputJson)) {
+    existing = JSON.parse(fs.readFileSync(outputJson, 'utf8'));
+  }
+  existing.push({ url: stunUrl, candidates });
+  fs.writeFileSync(outputJson, JSON.stringify(existing, null, 2));
 
   await browser.close();
 })();
