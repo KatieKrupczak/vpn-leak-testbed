@@ -31,6 +31,7 @@ WORKDIR /agent
 # Copy scripts
 COPY visit_urls.sh webrtc_check.js quic_check.js /agent/
 
+
 RUN chmod +x /agent/visit_urls.sh
 
 # Install Puppeteer locally

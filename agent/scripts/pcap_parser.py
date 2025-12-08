@@ -5,6 +5,7 @@ import subprocess
 import re
 import os
 import sys
+from ipaddress import ip_address, IPv4Address, IPv6Address, IPv4Network, IPv6Network
 
 # ----------------------
 # Helper functions
@@ -52,6 +53,24 @@ def get_dns_ips(container_name="vpn-client"):
     except subprocess.CalledProcessError:
         return []
 
+def is_private_ip(ip):
+    """Check if IP is a private/tunnel/local address (IPv4/IPv6)."""
+    try:
+        ip_obj = ip_address(ip)
+        if isinstance(ip_obj, IPv4Address):
+            private_ranges = [
+                IPv4Network("10.0.0.0/8"),
+                IPv4Network("172.16.0.0/12"),
+                IPv4Network("192.168.0.0/16"),
+                IPv4Network("127.0.0.0/8")
+            ]
+            return any(ip_obj in net for net in private_ranges)
+        elif isinstance(ip_obj, IPv6Address):
+            return ip_obj.is_link_local or ip_obj.is_private
+    except ValueError:
+        return False
+    return False
+
 # ----------------------
 # Parsing logic
 # ----------------------
@@ -60,27 +79,37 @@ def parse_pcap(file_path, vpn_ips, vpn_dns_ips, webrtc_json_path=None):
 
     dns_leaks = []
     ipv6_leaks = []
-    quic_leaks = []
     webrtc_leaks = []
+    quic_leaks = []
 
     for packet in cap:
-        ip_src = getattr(packet.ip, 'src', None) or getattr(packet.ipv6, 'src', None)
-        ip_dst = getattr(packet.ip, 'dst', None) or getattr(packet.ipv6, 'dst', None)
+        if hasattr(packet, "ip"):
+            ip_src = getattr(packet.ip, "src", None)
+            ip_dst = getattr(packet.ip, "dst", None)
+        elif hasattr(packet, "ipv6"):
+            ip_src = getattr(packet.ipv6, "src", None)
+            ip_dst = getattr(packet.ipv6, "dst", None)
+        else:
+            ip_src = None
+            ip_dst = None
 
         # DNS leak
         if 'DNS' in packet:
             if ip_src and ip_dst not in vpn_dns_ips:
-                dns_leaks.append({'query': getattr(packet.dns, 'qry_name', 'N/A'), 'dst_ip': ip_dst})
+                dns_leaks.append({
+                    'query': getattr(packet.dns, 'qry_name', 'N/A'),
+                    'dst_ip': ip_dst
+                })
 
         # IPv6 leak
         if hasattr(packet, 'ipv6') and ip_src:
-            if ip_src not in vpn_ips:
+            if ip_src not in vpn_ips and not is_private_ip(ip_src):
                 ipv6_leaks.append({'src_ip': ip_src})
 
         # QUIC leak (UDP 443)
         if hasattr(packet, 'udp') and ip_src:
             if int(packet.udp.dstport) == 443:
-                if ip_src not in vpn_ips:
+                if ip_src not in vpn_ips and not is_private_ip(ip_src):
                     quic_leaks.append({'src_ip': ip_src})
 
     # ----------------------
@@ -93,30 +122,32 @@ def parse_pcap(file_path, vpn_ips, vpn_dns_ips, webrtc_json_path=None):
         for entry in webrtc_data:
             url = entry.get("url")
             candidates = entry.get("candidates", [])
+            
             for c in candidates:
+                
                 # Extract candidate IP
                 match = re.search(r'\s(\d+\.\d+\.\d+\.\d+|\S+):?\d*\s', c)
                 if match:
                     ip = match.group(1)
-                    if ip not in vpn_ips:
+                    if ip not in vpn_ips and not is_private_ip(ip):
                         webrtc_leaks.append({'mapped_ip': ip, 'url': url, 'candidate': c})
 
     return {
         'dns_leaks': dns_leaks,
         'ipv6_leaks': ipv6_leaks,
-        'quic_leaks': quic_leaks,
-        'webrtc_leaks': webrtc_leaks
+        'webrtc_leaks': webrtc_leaks,
+        'quic_leaks': quic_leaks
     }
 
 def summarize_results(results, vpn_ips, vpn_dns_ips):
-    return {
-        'detected_vpn_ips': vpn_ips,
-        'detected_dns_ips': vpn_dns_ips,
-        'DNS Leak': results['dns_leaks'] if results['dns_leaks'] else None,
-        'IPv6 Leak': results['ipv6_leaks'] if results['ipv6_leaks'] else None,
-        'QUIC Leak': results['quic_leaks'] if results['quic_leaks'] else None,
-        'WebRTC Leak': results['webrtc_leaks'] if results['webrtc_leaks'] else None
-    }
+    summary = {}
+    summary['VPN IPs'] = vpn_ips
+    summary['DNS IPs'] = vpn_dns_ips
+    summary['DNS Leak'] = results['dns_leaks'] if results['dns_leaks'] else None
+    summary['IPv6 Leak'] = results['ipv6_leaks'] if results['ipv6_leaks'] else None
+    summary['WebRTC Leak'] = results['webrtc_leaks'] if results['webrtc_leaks'] else None
+    summary['QUIC Leak'] = results['quic_leaks'] if results['quic_leaks'] else None
+    return summary
 
 def parse_directory(pcap_dir, vpn_ips, vpn_dns_ips, webrtc_json_path=None):
     summary_dict = {}
@@ -132,34 +163,38 @@ def parse_directory(pcap_dir, vpn_ips, vpn_dns_ips, webrtc_json_path=None):
 # Main
 # ----------------------
 if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print("Usage: python3 pcap_parser.py <pcap_directory> [webrtc_json_file]")
+    if len(sys.argv) < 3:
+        print("Usage: python3 pcap_parser.py <output_json> <pcap1> [pcap2 ...] [webrtc_json]")
         sys.exit(1)
 
-    pcap_dir = sys.argv[1]
-    webrtc_json_path = sys.argv[2] if len(sys.argv) > 2 else None
+    output_json = sys.argv[1]
 
+    # Everything except the first two args is a pcap file
+    # Optional last argument may be a .json for WebRTC data
+    potential_webrtc = sys.argv[-1]
+    if potential_webrtc.endswith(".json"):
+        pcap_files = sys.argv[2:-1]
+        webrtc_json_path = potential_webrtc
+    else:
+        pcap_files = sys.argv[2:]
+        webrtc_json_path = None
+
+    # VPN info
     vpn_ips = get_vpn_ip() + get_vpn_public_ip()
     vpn_dns_ips = get_dns_ips()
 
     print(f"Detected VPN IP(s): {vpn_ips}")
     print(f"Detected DNS IP(s): {vpn_dns_ips}")
 
-    # Load existing summary JSON if it exists
-    output_file = os.path.join("results", "leak_summary.json")
-    os.makedirs("results", exist_ok=True)
-    if os.path.isfile(output_file):
-        with open(output_file) as f:
-            all_summaries = json.load(f)
-    else:
-        all_summaries = {}
+    # Parse each pcap individually
+    all_summaries = {}
+    for pcap_path in pcap_files:
+        filename = os.path.basename(pcap_path)
+        results = parse_pcap(pcap_path, vpn_ips, vpn_dns_ips, webrtc_json_path)
+        all_summaries[filename] = summarize_results(results, vpn_ips, vpn_dns_ips)
 
-    # Parse new PCAPs and append
-    new_summaries = parse_directory(pcap_dir, vpn_ips, vpn_dns_ips, webrtc_json_path)
-    all_summaries.update(new_summaries)
-
-    # Write back the combined JSON
-    with open(output_file, 'w') as f:
+    # Write output file
+    with open(output_json, "w") as f:
         json.dump(all_summaries, f, indent=4)
 
-    print(f"\n=== All pcap summaries saved to {output_file} ===")
+    print("\n=== Summary written to:", output_json, "===")

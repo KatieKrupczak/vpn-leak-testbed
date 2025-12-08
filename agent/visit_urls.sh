@@ -27,15 +27,6 @@ fi
 TIMESTAMP=$(date +%Y%m%d-%H%M%S)
 PCAP="$OUTDIR/traffic-${NAME}-${TYPE}-${TIMESTAMP}.pcap"
 
-VPN_IP=$(docker exec vpn-client curl -s https://ifconfig.me || echo "")
-while [ -z "$VPN_IP" ]; do
-    echo "[agent] Waiting for VPN public IP..."
-    sleep 1
-    VPN_IP=$(docker exec vpn-client curl -s https://ifconfig.me || echo "")
-done
-
-echo "[agent] VPN is fully connected: $VPN_IP"
-
 
 # Start tcpdump once (capture all traffic)
 echo "Starting tcpdump -> $PCAP"
@@ -43,13 +34,14 @@ tcpdump -i any -s 0 -w "$PCAP" -U &>/dev/null &
 TCPDUMP_PID=$!
 trap 'kill $TCPDUMP_PID 2>/dev/null || true' EXIT
 
+
 # Wait for VPN tunnel to appear
 echo "Waiting for VPN $IFACE to come up..."
 while ! ip addr show $IFACE &>/dev/null; do
   sleep 1
 done
 echo "VPN tunnel is up."
-
+sleep 10
 # =============================
 # IPv6 Leak Test (optional)
 # =============================
@@ -137,6 +129,4 @@ echo "Done. Combined pcap: $PCAP"
 
 echo "Running VPN leak parser on captured traffic..."
 
-# Run the Python parser with the PCAP directory and WebRTC JSON
-# We'll assume all PCAPs are in $OUTDIR
-python3 /agent/scripts/pcap_parser.py "$OUTDIR" "$WEBRTC_JSON"
+
