@@ -33,5 +33,9 @@ RUN chmod +x /usr/local/bin/start-vpn
 COPY vpn-dns-helper.sh /usr/local/bin/vpn-dns-helper.sh
 RUN chmod +x /usr/local/bin/vpn-dns-helper.sh
 
+# Copy dump state script for testing connectivity
+COPY dump-state.sh /usr/local/bin/vpm-dump-state
+RUN chmod +x /usr/local/bin/vpn-dump-state
+
 # Default command
 CMD ["/usr/local/bin/start-vpn"]

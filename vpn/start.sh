@@ -30,6 +30,10 @@ case "$CONFIG" in
         --script-security 2 \
         --up /usr/local/bin/vpn-dns-helper.sh &
     fi
+    
+    # Dump state for debugging
+    /usr/local/bin/vpn-dump-state.sh
+
     VPN_PID=$!
     ;;
   *.conf) 
@@ -53,6 +57,9 @@ case "$CONFIG" in
     # wg-quick already applies any DNS= entries in the config.
     # Run the same helper just for logging + DNS test:
     /usr/local/bin/vpn-dns-helper.sh
+
+    # Dump state for debugging
+    /usr/local/bin/vpn-dump-state.sh
 
     VPN_PID=""
     ;;
