@@ -14,7 +14,8 @@ const puppeteer = require('puppeteer-core');
   const browser = await puppeteer.launch({
     executablePath: '/usr/bin/chromium',
     headless: true,
-    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-ipv6']
+    //args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-ipv6']
+    args: ['--no-sandbox', '--disable-setuid-sandbox']
   });
 
   const page = await browser.newPage();

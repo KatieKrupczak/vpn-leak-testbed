@@ -14,7 +14,7 @@ const puppeteer = require('puppeteer-core');
     args: [
       '--no-sandbox',
       '--disable-setuid-sandbox',
-      '--disable-ipv6',
+      //'--disable-ipv6',
       '--disable-dev-shm-usage',
       '--enable-quic',
       '--origin-to-force-quic-on=*:443'
