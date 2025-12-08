@@ -82,7 +82,11 @@ def parse_pcap(file_path, vpn_ips, vpn_dns_ips, webrtc_json_path=None):
     webrtc_leaks = []
     quic_leaks = []
 
+    packet_count = 0
     for packet in cap:
+        packet_count += 1
+        if packet_count % 1000 == 0:
+            print(f"Processed {packet_count} packets...")
         if hasattr(packet, "ip"):
             ip_src = getattr(packet.ip, "src", None)
             ip_dst = getattr(packet.ip, "dst", None)
@@ -93,9 +97,9 @@ def parse_pcap(file_path, vpn_ips, vpn_dns_ips, webrtc_json_path=None):
             ip_src = None
             ip_dst = None
 
-        # DNS leak
+        # DNS leak - detect DNS queries NOT going to VPN DNS servers
         if 'DNS' in packet:
-            if ip_src and ip_dst not in vpn_dns_ips:
+            if ip_dst and ip_dst not in vpn_dns_ips and not is_private_ip(ip_dst):
                 dns_leaks.append({
                     'query': getattr(packet.dns, 'qry_name', 'N/A'),
                     'dst_ip': ip_dst
@@ -124,14 +128,17 @@ def parse_pcap(file_path, vpn_ips, vpn_dns_ips, webrtc_json_path=None):
             candidates = entry.get("candidates", [])
             
             for c in candidates:
-                
-                # Extract candidate IP
-                match = re.search(r'\s(\d+\.\d+\.\d+\.\d+|\S+):?\d*\s', c)
+                # Extract candidate IP - look for IPv4 after "typ srflx" or actual IP addresses
+                # Format: "candidate:... <ip> <port> typ ..."
+                match = re.search(r'(\d+\.\d+\.\d+\.\d+)\s+\d+\s+typ', c)
                 if match:
                     ip = match.group(1)
                     if ip not in vpn_ips and not is_private_ip(ip):
                         webrtc_leaks.append({'mapped_ip': ip, 'url': url, 'candidate': c})
 
+    cap.close()
+    print(f"Total packets processed: {packet_count}")
+    
     return {
         'dns_leaks': dns_leaks,
         'ipv6_leaks': ipv6_leaks,
@@ -149,35 +156,41 @@ def summarize_results(results, vpn_ips, vpn_dns_ips):
     summary['QUIC Leak'] = results['quic_leaks'] if results['quic_leaks'] else None
     return summary
 
-def parse_directory(pcap_dir, vpn_ips, vpn_dns_ips, webrtc_json_path=None):
-    summary_dict = {}
-    for root, _, files in os.walk(pcap_dir):
-        for file in files:
-            if file.endswith(".pcap") or file.endswith(".pcapng"):
-                pcap_path = os.path.join(root, file)
-                results = parse_pcap(pcap_path, vpn_ips, vpn_dns_ips, webrtc_json_path)
-                summary_dict[file] = summarize_results(results, vpn_ips, vpn_dns_ips)
-    return summary_dict
-
 # ----------------------
 # Main
 # ----------------------
 if __name__ == "__main__":
-    if len(sys.argv) < 3:
-        print("Usage: python3 pcap_parser.py <output_json> <pcap1> [pcap2 ...] [webrtc_json]")
+    if len(sys.argv) < 2:
+        print("Usage: python3 pcap_parser.py <pcap_filename> [webrtc_json_filename]")
         sys.exit(1)
 
-    output_json = sys.argv[1]
+    # Get script directory
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    
+    # Setup paths
+    results_dir = os.path.join(script_dir, "..", "..", "results")
+    output_dir = os.path.join(script_dir, "results")
+    
+    # Create output directory if it doesn't exist
+    os.makedirs(output_dir, exist_ok=True)
+    
+    # Get input files
+    pcap_filename = sys.argv[1]
+    pcap_file = os.path.join(results_dir, pcap_filename)
+    
+    webrtc_json_path = None
+    if len(sys.argv) > 2:
+        webrtc_filename = sys.argv[2]
+        webrtc_json_path = os.path.join(results_dir, webrtc_filename)
 
-    # Everything except the first two args is a pcap file
-    # Optional last argument may be a .json for WebRTC data
-    potential_webrtc = sys.argv[-1]
-    if potential_webrtc.endswith(".json"):
-        pcap_files = sys.argv[2:-1]
-        webrtc_json_path = potential_webrtc
-    else:
-        pcap_files = sys.argv[2:]
-        webrtc_json_path = None
+    # Validate files exist
+    if not os.path.isfile(pcap_file):
+        print(f"Error: PCAP file not found: {pcap_file}")
+        sys.exit(1)
+    
+    if webrtc_json_path and not os.path.isfile(webrtc_json_path):
+        print(f"Error: WebRTC JSON file not found: {webrtc_json_path}")
+        sys.exit(1)
 
     # VPN info
     vpn_ips = get_vpn_ip() + get_vpn_public_ip()
@@ -186,15 +199,16 @@ if __name__ == "__main__":
     print(f"Detected VPN IP(s): {vpn_ips}")
     print(f"Detected DNS IP(s): {vpn_dns_ips}")
 
-    # Parse each pcap individually
-    all_summaries = {}
-    for pcap_path in pcap_files:
-        filename = os.path.basename(pcap_path)
-        results = parse_pcap(pcap_path, vpn_ips, vpn_dns_ips, webrtc_json_path)
-        all_summaries[filename] = summarize_results(results, vpn_ips, vpn_dns_ips)
+    # Parse the pcap file
+    print(f"\nParsing {pcap_file}...")
+    results = parse_pcap(pcap_file, vpn_ips, vpn_dns_ips, webrtc_json_path)
+    
+    filename = os.path.basename(pcap_file)
+    summary = {filename: summarize_results(results, vpn_ips, vpn_dns_ips)}
 
-    # Write output file
+    # Write output file to agent/scripts/results/
+    output_json = os.path.join(output_dir, f"{os.path.splitext(pcap_filename)[0]}_summary.json")
     with open(output_json, "w") as f:
-        json.dump(all_summaries, f, indent=4)
+        json.dump(summary, f, indent=4)
 
-    print("\n=== Summary written to:", output_json, "===")
+    print(f"\n=== Summary written to: {output_json} ===")
