@@ -29,5 +29,9 @@ WORKDIR /etc/vpn/configs
 COPY start.sh /usr/local/bin/start-vpn
 RUN chmod +x /usr/local/bin/start-vpn
 
+# Copy DNS helper script for configuring DNS for openvpn and testing connectivity
+COPY vpn-dns-helper.sh /usr/local/bin/vpn-dns-helper.sh
+RUN chmod +x /usr/local/bin/vpn-dns-helper.sh
+
 # Default command
 CMD ["/usr/local/bin/start-vpn"]

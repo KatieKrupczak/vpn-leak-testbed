@@ -22,9 +22,13 @@ case "$CONFIG" in
     echo "[vpn] Starting OpenVPN..."
     if [ -n "$AUTH" ]; then
       echo "[vpn] Using auth file: $AUTH"
-      openvpn --config "$CONFIG" --auth-user-pass "$AUTH" &
+      openvpn --config "$CONFIG" --auth-user-pass "$AUTH" \
+      --script-security 2 \
+      --up /usr/local/bin/vpn-dns-helper.sh &
     else
-      openvpn --config "$CONFIG" &
+      openvpn --config "$CONFIG" \
+        --script-security 2 \
+        --up /usr/local/bin/vpn-dns-helper.sh &
     fi
     VPN_PID=$!
     ;;
@@ -45,6 +49,11 @@ case "$CONFIG" in
     ls -l /etc/wireguard || true
 
     wg-quick up "$IFACE"
+
+    # wg-quick already applies any DNS= entries in the config.
+    # Run the same helper just for logging + DNS test:
+    /usr/local/bin/vpn-dns-helper.sh
+
     VPN_PID=""
     ;;
   *) 
