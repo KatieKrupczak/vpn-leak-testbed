@@ -42,8 +42,13 @@ while ! ip addr show $IFACE &>/dev/null; do
 done
 echo "VPN tunnel is up."
 
-# Force DNS to public resolvers
-# echo "nameserver 1.1.1.1" > /etc/resolv.conf
+# IPv6 Sanity Check
+echo "[agent] IPv6 sanity check via ipv6.google.com"
+if curl -6 --max-time 5 https://ipv6.google.com >/dev/null 2>&1; then
+  echo "[agent] IPv6 sanity check: OK"
+else
+  echo "[agent] IPv6 sanity check: FAILED"
+fi
 
 # === IPv4 / IPv6 URL Tests ===
 if [ -f "$URL_FILE" ]; then
