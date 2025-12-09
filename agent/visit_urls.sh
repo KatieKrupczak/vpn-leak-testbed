@@ -127,6 +127,5 @@ ip addr show
 
 echo "Done. Combined pcap: $PCAP"
 
-echo "Running VPN leak parser on captured traffic..."
 
 

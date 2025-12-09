@@ -126,42 +126,40 @@ def parse_pcap(pcap_path, vpn_ips, vpn_dns_ips, ipv6_ok=True, webrtc_json_path=N
                     logs.append(f"[DNS LEAK] Query={qry}, dst={dst}")
                     seen_dns.add(dst)
 
-            # IPv4 leak (including private IP restriction)
-            if ip_src and ipaddress.ip_address(ip_src).version == 4:
-                # Private IPv4 can only communicate with endpoint
-                if private_ipv4 and endpoint_ip:
-                    if (ip_src == private_ipv4 and dst != endpoint_ip) or (ip_dst == private_ipv4 and src != endpoint_ip):
-                        if ip_src not in seen_ipv4:
-                            ipv4_leaks.append({
-                                "src_ip": ip_src,
-                                "dst_ip": dst,
-                                "reason": "private IPv4 communicating outside VPN endpoint"
-                            })
-                            logs.append(f"[IPv4 LEAK] {ip_src} → {dst} (private IPv4 outside endpoint)")
-                            seen_ipv4.add(ip_src)
-                        continue  # skip normal public check for private IP
+            # IPv4 leak (flag anything not VPN IPv4 or private↔endpoint)
+            if (ip_src and ipaddress.ip_address(ip_src).version == 4) or \
+               (ip_dst and ipaddress.ip_address(ip_dst).version == 4):
 
-                # Normal public IPv4 check
-                if is_public_ip(ip_src, vpn_ips) and ip_src not in seen_ipv4:
-                    ipv4_leaks.append({"src_ip": ip_src, "reason": "public IPv4 outside VPN"})
-                    logs.append(f"[IPv4 LEAK] src={ip_src}")
-                    seen_ipv4.add(ip_src)
+                # Skip allowed private↔endpoint traffic
+                if private_ipv4 and endpoint_ip:
+                    if ((ip_src == private_ipv4 and ip_dst == endpoint_ip) or
+                        (ip_dst == private_ipv4 and ip_src == endpoint_ip)):
+                        continue
+
+                # Skip VPN IPv4 traffic
+                if ip_src in vpn_ips or ip_dst in vpn_ips:
+                    continue
+
+                # Flag any other IPv4 traffic
+                leak_src = ip_src if ip_src else "N/A"
+                leak_dst = ip_dst if ip_dst else "N/A"
+                if leak_src not in seen_ipv4 or leak_dst not in seen_ipv4:
+                    ipv4_leaks.append({
+                        "src_ip": leak_src,
+                        "dst_ip": leak_dst,
+                        "reason": "IPv4 traffic outside VPN / private endpoint rules"
+                    })
+                    logs.append(f"[IPv4 LEAK] {leak_src} → {leak_dst}")
+                    seen_ipv4.add(leak_src)
+                    seen_ipv4.add(leak_dst)
 
             # IPv6 leak (including optional private IPv6 restriction)
             if ipv6_src and ipaddress.ip_address(ipv6_src).version == 6:
                 if private_ipv6 and endpoint_ip:
-                    if (ipv6_src == private_ipv6 and dst != endpoint_ip) or (ipv6_dst == private_ipv6 and src != endpoint_ip):
-                        if ipv6_src not in seen_ipv6:
-                            ipv6_leaks.append({
-                                "src_ip": ipv6_src,
-                                "dst_ip": dst,
-                                "reason": "private IPv6 communicating outside VPN endpoint"
-                            })
-                            logs.append(f"[IPv6 LEAK] {ipv6_src} → {dst} (private IPv6 outside endpoint)")
-                            seen_ipv6.add(ipv6_src)
-                        continue  # skip normal public check for private IP
+                    if ((ipv6_src == private_ipv6 and ipv6_dst == endpoint_ip) or
+                        (ipv6_dst == private_ipv6 and ipv6_src == endpoint_ip)):
+                        continue  # allowed, skip
 
-                # Normal public IPv6 check
                 if ipv6_ok and is_public_ip(ipv6_src, vpn_ips) and ipv6_src not in seen_ipv6:
                     ipv6_leaks.append({"src_ip": ipv6_src, "reason": "public IPv6 outside VPN"})
                     logs.append(f"[IPv6 LEAK] src={ipv6_src}")
