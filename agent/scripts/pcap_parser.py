@@ -40,8 +40,9 @@ def is_public_ip(ip, vpn_ips):
         return True
     except ValueError:
         return False
+
 # ===============================
-# Get public IP via curl inside container (Script 1)
+# Get public IP via curl inside container
 # ===============================
 def get_vpn_public_ip(container_name="vpn-client"):
     try:
@@ -54,7 +55,7 @@ def get_vpn_public_ip(container_name="vpn-client"):
         return []
 
 # ===============================
-# WebRTC JSON leak parser (Script 1 logic)
+# WebRTC JSON leak parser
 # ===============================
 def parse_webrtc_file(webrtc_json_path, vpn_ips):
     leaks = []
@@ -73,14 +74,15 @@ def parse_webrtc_file(webrtc_json_path, vpn_ips):
             match = re.search(r'(\d+\.\d+\.\d+\.\d+)\s+\d+\s+typ', c)
             if match:
                 ip = match.group(1)
-                if ip not in vpn_ips and is_public_ip(ip):
+                if ip not in vpn_ips and is_public_ip(ip, vpn_ips):
                     leaks.append({'mapped_ip': ip, 'url': url, 'candidate': c})
     return leaks
 
 # ===============================
 # Parse a single pcap file
 # ===============================
-def parse_pcap(pcap_path, vpn_ips, vpn_dns_ips, ipv6_ok=True, webrtc_json_path=None):
+def parse_pcap(pcap_path, vpn_ips, vpn_dns_ips, ipv6_ok=True, webrtc_json_path=None,
+               private_ipv4=None, private_ipv6=None, endpoint_ip=None):
     dns_leaks = []
     ipv4_leaks = []
     ipv6_leaks = []
@@ -94,7 +96,7 @@ def parse_pcap(pcap_path, vpn_ips, vpn_dns_ips, ipv6_ok=True, webrtc_json_path=N
     seen_webrtc = set()
     seen_quic = set()
 
-    # Pre-parse WebRTC JSON (Script 1 logic)
+    # Pre-parse WebRTC JSON
     json_webrtc_leaks = parse_webrtc_file(webrtc_json_path, vpn_ips) if webrtc_json_path else []
 
     print(f"[INFO] Parsing {pcap_path}")
@@ -124,15 +126,40 @@ def parse_pcap(pcap_path, vpn_ips, vpn_dns_ips, ipv6_ok=True, webrtc_json_path=N
                     logs.append(f"[DNS LEAK] Query={qry}, dst={dst}")
                     seen_dns.add(dst)
 
-            # IPv4 leak
-            if ip_src and ipaddress.ip_address(ip_src).version == 4:
-                if is_public_ip(ip_src, vpn_ips) and ip_src not in seen_ipv4:
-                    ipv4_leaks.append({"src_ip": ip_src, "reason": "public IPv4 outside VPN"})
-                    logs.append(f"[IPv4 LEAK] src={ip_src}")
-                    seen_ipv4.add(ip_src)
+            # IPv4 leak (flag anything not VPN IPv4 or private↔endpoint)
+            if (ip_src and ipaddress.ip_address(ip_src).version == 4) or \
+               (ip_dst and ipaddress.ip_address(ip_dst).version == 4):
 
-            # IPv6 leak
+                # Skip allowed private↔endpoint traffic
+                if private_ipv4 and endpoint_ip:
+                    if ((ip_src == private_ipv4 and ip_dst == endpoint_ip) or
+                        (ip_dst == private_ipv4 and ip_src == endpoint_ip)):
+                        continue
+
+                # Skip VPN IPv4 traffic
+                if ip_src in vpn_ips or ip_dst in vpn_ips:
+                    continue
+
+                # Flag any other IPv4 traffic
+                leak_src = ip_src if ip_src else "N/A"
+                leak_dst = ip_dst if ip_dst else "N/A"
+                if leak_src not in seen_ipv4 or leak_dst not in seen_ipv4:
+                    ipv4_leaks.append({
+                        "src_ip": leak_src,
+                        "dst_ip": leak_dst,
+                        "reason": "IPv4 traffic outside VPN / private endpoint rules"
+                    })
+                    logs.append(f"[IPv4 LEAK] {leak_src} → {leak_dst}")
+                    seen_ipv4.add(leak_src)
+                    seen_ipv4.add(leak_dst)
+
+            # IPv6 leak (including optional private IPv6 restriction)
             if ipv6_src and ipaddress.ip_address(ipv6_src).version == 6:
+                if private_ipv6 and endpoint_ip:
+                    if ((ipv6_src == private_ipv6 and ipv6_dst == endpoint_ip) or
+                        (ipv6_dst == private_ipv6 and ipv6_src == endpoint_ip)):
+                        continue  # allowed, skip
+
                 if ipv6_ok and is_public_ip(ipv6_src, vpn_ips) and ipv6_src not in seen_ipv6:
                     ipv6_leaks.append({"src_ip": ipv6_src, "reason": "public IPv6 outside VPN"})
                     logs.append(f"[IPv6 LEAK] src={ipv6_src}")
@@ -151,7 +178,7 @@ def parse_pcap(pcap_path, vpn_ips, vpn_dns_ips, ipv6_ok=True, webrtc_json_path=N
 
     cap.close()
 
-    # Add WebRTC leaks (Script 1 logic)
+    # Add WebRTC leaks
     for j in json_webrtc_leaks:
         ip = j.get("mapped_ip")
         if ip and ip not in seen_webrtc:
@@ -183,9 +210,11 @@ def summarize(results):
 # ===============================
 # Parse directory or single file
 # ===============================
-def parse_input(path, vpn_ips, vpn_dns_ips, ipv6_ok, webrtc_json_path):
+def parse_input(path, vpn_ips, vpn_dns_ips, ipv6_ok, webrtc_json_path,
+                private_ipv4, private_ipv6, endpoint_ip):
     if os.path.isfile(path):
-        res = parse_pcap(path, vpn_ips, vpn_dns_ips, ipv6_ok, webrtc_json_path)
+        res = parse_pcap(path, vpn_ips, vpn_dns_ips, ipv6_ok, webrtc_json_path,
+                         private_ipv4, private_ipv6, endpoint_ip)
         return {os.path.basename(path): summarize(res)}
 
     elif os.path.isdir(path):
@@ -194,7 +223,8 @@ def parse_input(path, vpn_ips, vpn_dns_ips, ipv6_ok, webrtc_json_path):
             for f in files:
                 if f.endswith(".pcap") or f.endswith(".pcapng"):
                     full = os.path.join(root, f)
-                    res = parse_pcap(full, vpn_ips, vpn_dns_ips, ipv6_ok, webrtc_json_path)
+                    res = parse_pcap(full, vpn_ips, vpn_dns_ips, ipv6_ok, webrtc_json_path,
+                                     private_ipv4, private_ipv6, endpoint_ip)
                     summaries[f] = summarize(res)
         return summaries
 
@@ -206,8 +236,8 @@ def parse_input(path, vpn_ips, vpn_dns_ips, ipv6_ok, webrtc_json_path):
 # Main
 # ===============================
 if __name__ == "__main__":
-    if len(sys.argv) != 7:
-        print("Usage: python3 pcap_parser.py <pcap_file_or_dir> <vpn_ipv4> <vpn_ipv6> <vpn_dns> <ipv6_ok> <webrtc_json_or_none>")
+    if len(sys.argv) != 10:
+        print("Usage: python3 pcap_parser.py <pcap_file_or_dir> <vpn_ipv4> <vpn_ipv6> <vpn_dns> <ipv6_ok> <webrtc_json_or_none> <private_ipv4> <private_ipv6_or_none> <endpoint_ip>")
         sys.exit(1)
 
     path = sys.argv[1]
@@ -216,17 +246,21 @@ if __name__ == "__main__":
     vpn_dns_list = sys.argv[4].split(",")
     ipv6_ok = sys.argv[5].lower() in ["true", "1", "yes"]
     webrtc_json_path = sys.argv[6] if sys.argv[6].lower() != "none" else None
+    private_ipv4 = sys.argv[7]
+    private_ipv6 = sys.argv[8] if sys.argv[8].lower() != "none" else None
+    endpoint_ip = sys.argv[9]
 
     vpn_ips = vpn_ipv4_list + vpn_ipv6_list
     vpn_dns_ips = vpn_dns_list
 
-    # Add public IP via curl (Script 1 logic)
+    # Add public IP via curl
     public_ips = get_vpn_public_ip()
     if public_ips:
         print(f"[INFO] Adding public VPN IP from curl: {public_ips}")
         vpn_ips.extend(public_ips)
 
-    summaries = parse_input(path, vpn_ips, vpn_dns_ips, ipv6_ok, webrtc_json_path)
+    summaries = parse_input(path, vpn_ips, vpn_dns_ips, ipv6_ok, webrtc_json_path,
+                            private_ipv4, private_ipv6, endpoint_ip)
 
     os.makedirs("results", exist_ok=True)
     outfile = "results/leak_summary.json"
